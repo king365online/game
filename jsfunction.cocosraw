@@ -1,0 +1,133 @@
+function xGetLocation(LoadingScene) {
+	var self = LoadingScene;
+	cc.log('xGetLocation');
+	var location = "VN";
+	try {
+		var xhttp = new XMLHttpRequest();
+		xhttp.onreadystatechange = function() {
+			if (xhttp.readyState == 4) {
+				if (xhttp.status == 200) {
+					var data = xhttp.responseText.replace(/[\r\n]+/g, '","').replace(/\=+/g, '":"');
+					data = '{"' + data.slice(0, data.lastIndexOf('","')) + '"}';
+					var response = JSON.parse(data);
+					cc.log(response)
+					location = response["loc"];
+					cc.log(location)
+					xCheckHotupdate(self, location)
+				} else {
+					cc.log(xhttp.statusText)
+					xCheckHotupdate(self)
+				}
+			}
+		};
+		var url = "https://www.cloudflare.com/cdn-cgi/trace";
+		xhttp.open("GET", url, false);
+		xhttp.send();
+	} catch (error) {
+		cc.log(error);
+		cc.log("333333333333")
+		xCheckHotupdate(self, location);
+	}
+}
+function xCheckHotupdate(LoadingScene,loc = "VN") {
+	if (!LoadingScene) return;
+    let self = LoadingScene;
+    cc.log('xCheckHotupdate skip update: ' + JSON.stringify(self.isSkipUpdate()));
+    self.showInfo(self.NotificationTxt_1.NotificationTxt.CHECKING_UPDATE);
+    var simCode = self.getMobileCountryCode();
+    var dayOffset = Math.round((new Date() - new Date("2020,03,12")) / 1000 / 60 / 60 / 24);
+    var deviceName = self.getDeviceName();
+    var language = self.getSystemLanguage();
+    var osVer = self.getSystemVersion();
+    cc.log("===simCode:", simCode);
+    cc.log("===osVer:", osVer);
+    cc.log("===deviceName:", deviceName);
+    cc.log("===language:", language);
+    if (self.isHotUpdate
+        && self.hotUpdate
+        && cc.sys.isNative
+        && !self.isSkipUpdate()
+        && (simCode == "452" || simCode == "vn")
+        && dayOffset > 7
+        && loc == "VN"
+        && !(deviceName.includes("iPad") && language !== "vi-VN")
+    ) {
+        cc.log('Loading/HotUpdate');
+        self.hotUpdate.init(function () {
+            cc.log('LoadingScene/hot update');
+            self.hotUpdate.updateResource({
+                callbackUpToDate: function () {
+                    cc.log('callbackUpToDate');
+                    self.showInfo(self.NotificationTxt_1.NotificationTxt.UP_TO_DATE);
+                    self.setSkipUpdate(true);
+                    // cc.game.restart();
+                    self.mainLoading();
+                },
+                callbackNewVersionFound: function () {
+                    cc.log('callbackNewVersionFound');
+                    self.showInfo(self.NotificationTxt_1.NotificationTxt.NEW_VERSION_FOUND);
+                    self.setSkipUpdate(true);
+                    self.showInfo(self.NotificationTxt_1.NotificationTxt.UPDATING);
+                    if (self.hotUpdate.isReadyUpdate()) {
+                        self.hotUpdate.hotUpdate();
+                    }
+                    else {
+                        self.scheduleOnce(() => {
+                            if (self.hotUpdate.isReadyUpdate()) {
+                                self.hotUpdate.hotUpdate();
+                            }
+                            else {
+                                cc.log('cannot update.');
+                                self.setSkipUpdate(false);
+                                self.showInfo(self.NotificationTxt_1.NotificationTxt.ERR_UPDATE);
+                                cc.game.restart();
+                            }
+                        }, 1);
+                    }
+                },
+                callbackFail: function () {
+                    cc.log('callbackFail');
+                    self.showInfo(self.NotificationTxt_1.NotificationTxt.ERR_UPDATE);
+                    if (self.hotUpdate.canRetry()) {
+                        self.showInfo(self.NotificationTxt_1.NotificationTxt.RETRY_UPDATE);
+                        self.hotUpdate.retry();
+                    }
+                    else {
+                        self.setSkipUpdate(false);
+                        cc.game.restart();
+                    }
+                },
+                callbackFinish: function () {
+                    cc.log('callbackFinish');
+                    self.setSkipUpdate(true);
+                    // cc.game.restart();
+                },
+                callbackUpdateProgress: function (percentByFile) {
+                    // self.percent = percent / 100;
+                    // self.updatePercent();
+                    self._setPercent(percentByFile);
+                },
+                callbackTimeout: function () {
+                    cc.log('callbackTimeout');
+                    // self.txt.setString(DEFAULT_LANG.updateTimeOut);
+                    cc.game.restart();
+                },
+                callbackFailDownloadManifest: function () {
+                    cc.log('LoadingScene/callbackFailDownloadManifest');
+                    self.setSkipUpdate(false);
+                    self.mainLoading();
+                },
+                callbackFailParseManifest: function () {
+                    cc.log('LoadingScene/callbackFailParseManifest');
+                    self.setSkipUpdate(false);
+                    self.mainLoading();
+                }
+            });
+        }.bind(self));
+    }
+    else {
+        cc.log('skip update main loading');
+        self.setSkipUpdate(false);
+        self.mainLoading();
+    }
+}
